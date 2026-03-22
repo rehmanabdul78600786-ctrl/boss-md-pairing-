@@ -1,0 +1,16 @@
+{
+  "name": "boss-md-pairing",
+  "version": "2.0.0",
+  "description": "BOSS MD WhatsApp Pairing Website - Render & Vercel Ready",
+  "scripts": {
+    "start": "cd backend && node server.js",
+    "build": "cd backend && npm install",
+    "vercel-build": "npm run build",
+    "render-build": "npm run build"
+  },
+  "engines": {
+    "node": "18.x"
+  },
+  "author": "Boss-md",
+  "license": "MIT"
+}
