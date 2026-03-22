@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>BOSS MD - Premium WhatsApp Pairing</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="logo">
+                <i class="fas fa-crown"></i>
+                <span>BOSS MD</span>
+            </div>
+            <div class="nav-links" id="navLinks">
+                <a href="#home" class="nav-link active">Home</a>
+                <a href="#pair" class="nav-link">Pair Device</a>
+                <a href="#status" class="nav-link">Status</a>
+                <a href="#owner" class="nav-link">Owner</a>
+                <button class="premium-btn" id="premiumBtn">
+                    <i class="fas fa-gem"></i> Get Premium
+                </button>
+            </div>
+            <div class="menu-toggle" id="menuToggle">
+                <i class="fas fa-bars"></i>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Live Status Bar -->
+    <div class="status-bar">
+        <div class="status-container">
+            <div class="live-status">
+                <span class="status-dot online"></span>
+                <span id="serverStatus">Checking server...</span>
+            </div>
+            <div class="stats">
+                <i class="fas fa-users"></i>
+                <span id="activeSessions">0</span> Active Sessions
+            </div>
+        </div>
+    </div>
+
+    <!-- Hero Section -->
+    <section id="home" class="hero">
+        <div class="hero-content">
+            <div class="hero-text">
+                <h1 class="glow-text">BOSS MD</h1>
+                <p>Premium WhatsApp Bot Pairing System</p>
+                <div class="hero-buttons">
+                    <button class="btn-primary" onclick="scrollToPair()">
+                        <i class="fas fa-link"></i> Pair Device
+                    </button>
+                    <button class="btn-secondary" onclick="window.open('https://github.com/rehmanabdul78600786-ctrl', '_blank')">
+                        <i class="fab fa-github"></i> GitHub
+                    </button>
+                </div>
+            </div>
+            <div class="hero-image">
+                <div class="floating-card">
+                    <i class="fas fa-robot"></i>
+                    <h3>WhatsApp Bot</h3>
+                    <p>24/7 Active</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Pairing Section -->
+    <section id="pair" class="pair-section">
+        <div class="container">
+            <h2 class="section-title">Pair Your Device</h2>
+            <p class="section-subtitle">Choose your preferred pairing method</p>
+            
+            <div class="pair-methods">
+                <button class="method-btn active" data-method="code">
+                    <i class="fas fa-key"></i> Pair Code
+                </button>
+                <button class="method-btn" data-method="qr">
+                    <i class="fas fa-qrcode"></i> QR Code
+                </button>
+            </div>
+            
+            <div class="pair-box">
+                <div class="input-group">
+                    <label for="phoneNumber">
+                        <i class="fas fa-phone-alt"></i> WhatsApp Number
+                    </label>
+                    <div class="phone-input">
+                        <span class="country-code">+92</span>
+                        <input type="tel" id="phoneNumber" placeholder="3076411098" maxlength="10">
+                    </div>
+                    <small>Enter number without country code (e.g., 3076411098)</small>
+                </div>
+                
+                <button class="generate-btn" id="generateBtn" onclick="generateSession()">
+                    <i class="fas fa-cogs"></i> Generate Session
+                </button>
+                
+                <div id="loading" class="loading" style="display: none;">
+                    <div class="spinner"></div>
+                    <p>Generating your session...</p>
+                </div>
+                
+                <div id="result" class="result" style="display: none;">
+                    <div class="success-icon">
+                        <i class="fas fa-check-circle"></i>
+                    </div>
+                    <h3>Session Generated Successfully!</h3>
+                    
+                    <div class="session-info">
+                        <div class="info-row">
+                            <span>Session ID:</span>
+                            <code id="sessionId">-</code>
+                            <button class="copy-btn" onclick="copySessionId()">
+                                <i class="fas fa-copy"></i>
+                            </button>
+                        </div>
+                        <div class="info-row">
+                            <span>Pairing Code:</span>
+                            <code id="pairingCode">-</code>
+                            <button class="copy-btn" onclick="copyPairingCode()">
+                                <i class="fas fa-copy"></i>
+                            </button>
+                        </div>
+                        <div class="info-row">
+                            <span>Command:</span>
+                            <code id="command">.sg [session-id]</code>
+                            <button class="copy-btn" onclick="copyCommand()">
+                                <i class="fas fa-copy"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="qr-container" id="qrContainer" style="display: none;">
+                        <h4>Scan QR Code</h4>
+                        <div id="qrCode"></div>
+                    </div>
+                    
+                    <div class="instructions">
+                        <h4><i class="fas fa-info-circle"></i> Instructions</h4>
+                        <ol>
+                            <li>Open WhatsApp on your phone</li>
+                            <li>Go to Settings → Linked Devices</li>
+                            <li>Tap "Link a Device"</li>
+                            <li>Enter the 8-digit code above</li>
+                            <li>You'll receive a welcome message on WhatsApp</li>
+                        </ol>
+                    </div>
+                </div>
+                
+                <div id="error" class="error" style="display: none;">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <span id="errorMsg"></span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Status Section -->
+    <section id="status" class="status-section">
+        <div class="container">
+            <h2 class="section-title">System Status</h2>
+            <div class="status-cards">
+                <div class="status-card">
+                    <i class="fas fa-server"></i>
+                    <h3>Server</h3>
+                    <span class="status-badge online" id="serverBadge">Online</span>
+                    <p>Response Time: <span id="responseTime">0</span>ms</p>
+                </div>
+                <div class="status-card">
+                    <i class="fab fa-whatsapp"></i>
+                    <h3>WhatsApp API</h3>
+                    <span class="status-badge online" id="apiBadge">Connected</span>
+                    <p>Status: Active</p>
+                </div>
+                <div class="status-card">
+                    <i class="fas fa-database"></i>
+                    <h3>Sessions</h3>
+                    <span class="status-badge" id="sessionsBadge">0 Active</span>
+                    <p>Today's Total: <span id="totalToday">0</span></p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Owner Section -->
+    <section id="owner" class="owner-section">
+        <div class="container">
+            <h2 class="section-title">Meet The Owner</h2>
+            <div class="owner-card">
+                <div class="owner-image">
+                    <img src="https://files.catbox.moe/ny73ui.jpg" alt="Owner">
+                </div>
+                <div class="owner-info">
+                    <h3>Abdul Rehman</h3>
+                    <p>Developer & Founder of BOSS MD</p>
+                    <div class="owner-links">
+                        <a href="https://wa.me/923076411098" class="social-btn whatsapp">
+                            <i class="fab fa-whatsapp"></i> Contact
+                        </a>
+                        <a href="https://github.com/rehmanabdul78600786-ctrl" class="social-btn github">
+                            <i class="fab fa-github"></i> GitHub
+                        </a>
+                        <button id="subscribeBtn" class="social-btn channel">
+                            <i class="fab fa-telegram"></i> Subscribe Channel
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2026 BOSS MD - Premium WhatsApp Bot. All rights reserved.</p>
+            <p>Made with <i class="fas fa-heart"></i> by Abdul Rehman</p>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs2@0.0.2/qrcode.min.js"></script>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script src="js/main.js"></script>
+</body>
+      </html>
