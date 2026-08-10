@@ -216,8 +216,8 @@ app.get('/api/status', (req, res) => {
 app.get('/api/owner', (req, res) => {
     res.json({
         success: true,
-        name: 'Abdul Rehman',
-        number: '923076411098',
+        name: 'Mr Boss',
+        number: '923076411099',
         repo: 'https://github.com/rehmanabdul78600786-ctrl',
         image: 'https://files.catbox.moe/ny73ui.jpg'
     });
