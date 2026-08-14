@@ -4,11 +4,11 @@
   "description": "BOSS-MD WhatsApp Pairing Website - Auto Pairing Code Generator",
   "main": "boss.js",
   "scripts": {
-    "start": "node index.js",
-    "dev": "nodemon index.js",
-    "build": "npm install",
-    "vercel-start": "node index.js",
-    "render-start": "node index.js"
+    "start": "node boss.js",
+    "dev": "nodemon boss.js",
+    "build": "npm install --production",
+    "vercel-start": "node boss.js",
+    "render-start": "node boss.js"
   },
   "dependencies": {
     "express": "^4.18.2",
@@ -30,8 +30,7 @@
     "whatsapp",
     "pairing",
     "baileys",
-    "boss-md",
-    "whatsapp-bot"
+    "boss-md"
   ],
   "author": "BOSS-MD",
   "license": "MIT"
